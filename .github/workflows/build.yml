@@ -1,0 +1,33 @@
+name: Build with vcpkg manifest
+
+on: [push, pull_request]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup CMake
+      uses: lukka/get-cmake@latest
+
+    - name: Setup vcpkg
+      uses: lukka/run-vcpkg@v11
+      with:
+        vcpkgGitCommitId: 'latest'
+        vcpkgJsonGlob: '**/vcpkg.json'
+
+    - name: Configure and build
+      uses: lukka/run-cmake@v10
+      with:
+        configurePreset: 'default'
+        buildPreset: 'default'
+
+    - name: Test
+      uses: lukka/run-cmake@v10
+      with:
+        testPreset: 'default'
