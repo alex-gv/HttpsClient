@@ -58,6 +58,10 @@ target_include_directories(https_client
         ${Boost_INCLUDE_DIRS}
 )
 
+if(APPLE)
+    find_library(COREFOUNDATION_LIBRARY CoreFoundation)
+    find_library(SECURITY_LIBRARY Security)
+endif()
 
 if(WIN32)
     set_target_properties(https_client PROPERTIES
@@ -72,6 +76,8 @@ target_link_libraries(https_client
         Boost::beast
         OpenSSL::SSL
         OpenSSL::Crypto
+        $<$<PLATFORM_ID:Darwin>:${COREFOUNDATION_LIBRARY}>
+        $<$<PLATFORM_ID:Darwin>:${SECURITY_LIBRARY}>
 )
 
 install(TARGETS https_client
