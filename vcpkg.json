@@ -1,9 +1,10 @@
 {
-  "name": "https_client",
   "version-string": "1.0.0",
   "dependencies": [
-    "boost-beast",
+    "boost-system",
+    "boost-regex",
     "boost-asio",
+    "boost-beast",
     "openssl"
   ]
 }

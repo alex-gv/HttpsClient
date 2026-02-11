@@ -1,3 +1,4 @@
+#include <private/ssl_context_builder.h>
 #include <boost/asio.hpp>
 #include <boost/asio/ssl.hpp>
 #include <memory>
@@ -7,11 +8,12 @@
 #include <CoreFoundation/CoreFoundation.h>
 
 namespace https_client {
-class SSLCustomContextBuilderApple::Impl {
+class SSLCustomContextBuilder::Impl {
  public:
     std::unique_ptr<boost::asio::ssl::context> CreateContext(boost::asio::ssl::context_base::method method) {
+        auto ctx = std::make_unique<boost::asio::ssl::context>(method);
         AddMacosSystemCertificates(*ctx);
-        return std::make_unique<boost::asio::ssl::context>(method);
+        return ctx;
     }
 
  private:

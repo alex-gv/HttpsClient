@@ -1,6 +1,11 @@
 cmake_minimum_required(VERSION 3.16)
 project(https_client VERSION 1.0.0 LANGUAGES CXX)
 
+# Найти vcpkg toolchain
+if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
+    set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
+endif()
+
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -14,9 +19,8 @@ endif()
 add_definitions(-DHTTPS_CLIENT_BUILDING_DLL)
 add_definitions(-D_WIN32_WINNT=0x0601)
 
-find_package(Boost REQUIRED COMPONENTS system regex)
+find_package(Boost REQUIRED COMPONENTS asio beast system regex)
 find_package(OpenSSL REQUIRED)
-find_package(Boost REQUIRED COMPONENTS beast)
 
 
 set(SOURCES
