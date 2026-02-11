@@ -1,0 +1,70 @@
+name: Multi-platform build with vcpkg
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+
+jobs:
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-22.04, windows-2022, macos-12]
+        include:
+          - os: ubuntu-22.04
+            triplet: x64-linux
+            vcpkg_root: /usr/local/share/vcpkg
+          - os: windows-2022
+            triplet: x64-windows
+            vcpkg_root: C:/vcpkg
+          - os: macos-12
+            triplet: x64-osx
+            vcpkg_root: /usr/local/share/vcpkg
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Cache vcpkg
+      uses: actions/cache@v3
+      id: cache
+      with:
+        path: |
+          ${{ matrix.vcpkg_root }}
+          build/vcpkg_installed
+        key: ${{ runner.os }}-vcpkg-${{ hashFiles('**/vcpkg.json') }}
+        restore-keys: |
+          ${{ runner.os }}-vcpkg-
+
+    - name: Setup vcpkg
+      if: steps.cache.outputs.cache-hit != 'true'
+      run: |
+        git clone https://github.com/Microsoft/vcpkg.git ${{ matrix.vcpkg_root }}
+        ${{ matrix.vcpkg_root }}/bootstrap-vcpkg.${{ matrix.os == 'windows-2022' && 'bat' || 'sh' }}
+
+    - name: Install dependencies
+      run: |
+        ${{ matrix.vcpkg_root }}/vcpkg install --triplet ${{ matrix.triplet }}
+
+    - name: Configure CMake
+      run: |
+        cmake -B build -S . `
+          -DCMAKE_TOOLCHAIN_FILE="${{ matrix.vcpkg_root }}/scripts/buildsystems/vcpkg.cmake" `
+          -DVCPKG_TARGET_TRIPLET=${{ matrix.triplet }} `
+          -DCMAKE_BUILD_TYPE=Release
+
+    - name: Build
+      run: cmake --build build --config Release --parallel
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: ${{ runner.os }}-build
+        path: |
+          build/**/*.exe
+          build/**/*.dll
+          build/**/*.so
+          build/**/*.dylib
+          build/**/bin/
