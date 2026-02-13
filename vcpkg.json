@@ -6,5 +6,15 @@
     "boost-asio",
     "boost-beast",
     "openssl"
-  ]
+  ],
+  "features": {
+    "tests": {
+      "supports": "linux | windows | osx",
+      "dependencies": [
+        "gtest",
+        "cpp-httplib"
+      ],
+      "description": "Build tests"
+    }
+  }
 }

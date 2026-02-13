@@ -81,9 +81,9 @@ jobs:
       shell: bash
       run: |
         echo "Generated packages:"
-        ls -la *.deb *.tar.gz *.zip *.dmg *.exe 2>/dev/null || true
+        ls -la *.exe *.tar.gz *.zip *.lib *.a 2>/dev/null || true
         echo "::group::Package files"
-        find . -name "*.deb" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.dmg" -o -name "*.exe" | while read file; do
+        find . -name "*.exe" -o -name "*.tar.gz" -o -name "*.zip" -o -name "*.lib" -o -name "*.a" | while read file; do
           echo "Found: $file"
           echo "::set-output name=package_$(basename $file)::$file"
         done

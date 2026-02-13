@@ -1,7 +1,14 @@
 cmake_minimum_required(VERSION 3.16)
+
+option(ENABLE_TESTS "Build unit tests" OFF)
+
+if(BUILD_TESTING)
+  list(APPEND VCPKG_MANIFEST_FEATURES "tests")
+endif()
+
+
 project(https_client VERSION 1.0.0 LANGUAGES CXX)
 
-# Найти vcpkg toolchain
 if(DEFINED ENV{VCPKG_ROOT} AND NOT DEFINED CMAKE_TOOLCHAIN_FILE)
     set(CMAKE_TOOLCHAIN_FILE "$ENV{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake" CACHE STRING "")
 endif()
@@ -10,14 +17,21 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
-# Политика видимости символов
+
+
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
     set(CMAKE_CXX_VISIBILITY_PRESET hidden)
     set(CMAKE_VISIBILITY_INLINES_HIDDEN ON)
 endif()
 
 add_definitions(-DHTTPS_CLIENT_BUILDING_DLL)
-add_definitions(-D_WIN32_WINNT=0x0601)
+
+if (WIN32)
+    add_compile_definitions(
+        _WIN32_WINNT=0x0A00
+        WINVER=0x0A00
+    )
+endif()
 
 find_package(Boost REQUIRED COMPONENTS asio beast system regex)
 find_package(OpenSSL REQUIRED)
@@ -97,9 +111,6 @@ install(EXPORT https_clientTargets
     DESTINATION lib/cmake/https_client
 )
 
-#add_subdirectory(tests)
-add_subdirectory(example)
-
 
 include(InstallRequiredSystemLibraries)
 
@@ -119,3 +130,12 @@ else()
 endif()
 
 include(CPack)
+
+
+
+
+add_subdirectory(example)
+
+if(ENABLE_TESTS)
+    add_subdirectory(tests)
+endif()

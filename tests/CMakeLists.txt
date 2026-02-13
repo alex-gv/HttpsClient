@@ -1,22 +1,37 @@
-include(FetchContent)
+find_package(GTest REQUIRED)
+include(GoogleTest)
 
-FetchContent_Declare(
-  googletest
-  GIT_REPOSITORY https://github.com/google/googletest.git
-  GIT_TAG v1.17.0
+find_package(httplib CONFIG REQUIRED)
+
+find_library(HTTPS_CLIENT_LIB
+    NAMES https_client
+    PATHS J:/github/https_client/build/windows/Release
 )
-FetchContent_MakeAvailable(googletest)
 
 add_executable(https_client_tests
-    test_sync.cpp
-    test_async.cpp
+    test_sync_requests.cpp
+    test_async_requests.cpp
+    test_parallel.cpp
+    test_error_handling.cpp
 )
+
+if(WIN32)
+add_custom_command(TARGET https_client_tests POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "$<TARGET_FILE:https_client>"
+        $<TARGET_FILE_DIR:https_client_tests>
+)
+endif()
 
 target_link_libraries(https_client_tests
     PRIVATE
+        GTest::gtest
+        GTest::gtest_main
+        httplib::httplib
         https_client
-        gtest_main
 )
 
-include(GoogleTest)
+enable_testing()
+add_test(NAME https_client_tests COMMAND https_client_tests)
+
 gtest_discover_tests(https_client_tests)
