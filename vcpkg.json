@@ -1,11 +1,12 @@
 {
-  "version-string": "1.0.0",
+  "version-string": "1.0.1",
   "dependencies": [
     "boost-system",
     "boost-regex",
     "boost-asio",
     "boost-beast",
-    "openssl"
+    "openssl",
+    "mbedtls"
   ],
   "features": {
     "tests": {
@@ -18,3 +19,4 @@
     }
   }
 }
+

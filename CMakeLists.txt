@@ -40,7 +40,8 @@ set(SOURCES
     src/logger.cpp
     src/http_session.cpp
     $<$<PLATFORM_ID:Darwin>:src/apple/ssl_context_builder.cpp>
-    $<$<NOT:$<PLATFORM_ID:Darwin>>:src/default/ssl_context_builder.cpp>
+    $<$<PLATFORM_ID:Windows>:src/windows/ssl_context_builder.cpp>
+    $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:src/default/ssl_context_builder.cpp>
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)
@@ -78,10 +79,37 @@ endif()
 if(WIN32)
     set_target_properties(https_client PROPERTIES
         DEFINE_SYMBOL "HTTPS_CLIENT_BUILDING_DLL"
+        CXX_STANDARD 23
+        CXX_STANDARD_REQUIRED ON
+        CXX_EXTENSIONS OFF
+        POSITION_INDEPENDENT_CODE TRUE
+        VISIBILITY_INLINES_HIDDEN ON
+        CXX_VISIBILITY_PRESET hidden
     )
 endif()
 
-target_link_libraries(https_client
+target_link_options(https_client PRIVATE
+    $<$<OR:$<CXX_COMPILER_ID:GNU>,$<CXX_COMPILER_ID:Clang>>:-Wl,--exclude-libs,ALL>
+    $<$<AND:$<PLATFORM_ID:Android>,$<CXX_COMPILER_ID:Clang>>:-Wl,--gc-sections>
+    $<$<AND:$<PLATFORM_ID:Linux>,$<CXX_COMPILER_ID:Clang>>:-Wl,--gc-sections>
+    $<$<AND:$<PLATFORM_ID:APPLE>,$<CXX_COMPILER_ID:Clang>>:-Wl,-dead_strip>
+)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Android")
+    set(LIBSSL_FILE "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/lib/libmbedtls.a")
+    set(LIBCRYPTO_FILE "${CMAKE_BINARY_DIR}/vcpkg_installed/${VCPKG_TRIPLET}/lib/libmbedcrypto.a")
+    target_link_libraries(https_client
+    PRIVATE
+        Boost::system
+        Boost::regex
+        Boost::beast
+        ${LIBSSL_FILE}
+        ${LIBCRYPTO_FILE}
+        $<$<PLATFORM_ID:Darwin>:${COREFOUNDATION_LIBRARY}>
+        $<$<PLATFORM_ID:Darwin>:${SECURITY_LIBRARY}>
+)
+else()
+    target_link_libraries(https_client
     PRIVATE
         Boost::system
         Boost::regex
@@ -91,6 +119,9 @@ target_link_libraries(https_client
         $<$<PLATFORM_ID:Darwin>:${COREFOUNDATION_LIBRARY}>
         $<$<PLATFORM_ID:Darwin>:${SECURITY_LIBRARY}>
 )
+endif()
+
+
 
 install(TARGETS https_client
     EXPORT https_clientTargets

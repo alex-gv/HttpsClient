@@ -1,6 +1,6 @@
 {
     "name": "https-client",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "port-version": 1,
     "description": "Simple HTTPS client library for C++",
     "homepage": "https://github.com/alex-gv/https_client",

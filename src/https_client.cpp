@@ -59,8 +59,7 @@ std::unique_ptr<ssl::context> HttpsClient::Impl::createSslContext(const External
     ctx->set_options(ssl::context::default_workarounds);
 
     if (config.verifySsl) {
-        ctx->set_verify_mode(ssl::verify_peer);
-        ctx->set_verify_callback([](bool preverified, ssl::verify_context& ctx) { return true; });
+        ctx->set_verify_mode(ssl::verify_peer | ssl::verify_fail_if_no_peer_cert);
     } else {
         ctx->set_verify_mode(ssl::verify_none);
     }

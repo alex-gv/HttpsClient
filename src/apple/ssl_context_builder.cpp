@@ -29,11 +29,8 @@ class SSLCustomContextBuilder::Impl {
         AddCertificatesFromKeychain(store, kSecTrustSettingsDomainAdmin);
         AddCertificatesFromKeychain(store, kSecTrustSettingsDomainSystem);
 
-        try {
-            ctx.set_default_verify_paths();
-        } catch (const std::exception&) {
-            //  do nothing
-        }
+        boost::system::error_code ec;
+        ctx.set_default_verify_paths(ec);
     }
     void AddCertificatesFromKeychain(X509_STORE* store, SecTrustSettingsDomain domain) {
         CFArrayRef certs = nullptr;
