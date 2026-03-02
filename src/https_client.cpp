@@ -48,24 +48,27 @@ class HttpsClient::Impl {
     net::executor_work_guard<net::io_context::executor_type> work_guard_;
     std::vector<std::thread> threads_;
     Logger logger_;
+    std::unique_ptr<ssl::context> ssl_ctx_;
 };
 
 // Static helper function implementations
 std::unique_ptr<ssl::context> HttpsClient::Impl::createSslContext(const ExternalRequestConfig& config) {
-    SSLCustomContextBuilder ctx_builder;
-    auto ctx = ctx_builder.CreateContext(ssl::context::tls_client);
+    if (!ssl_ctx_) {
+        SSLCustomContextBuilder ctx_builder;
+        ssl_ctx_ = ctx_builder.CreateContext(ssl::context::tls_client);
+    }
 
-    ctx->set_default_verify_paths();
-    ctx->set_options(ssl::context::default_workarounds);
+    ssl_ctx_->set_default_verify_paths();
+    ssl_ctx_->set_options(ssl::context::default_workarounds);
 
     if (config.verifySsl) {
-        ctx->set_verify_mode(ssl::verify_peer | ssl::verify_fail_if_no_peer_cert);
+        ssl_ctx_->set_verify_mode(ssl::verify_peer | ssl::verify_fail_if_no_peer_cert);
     } else {
-        ctx->set_verify_mode(ssl::verify_none);
+        ssl_ctx_->set_verify_mode(ssl::verify_none);
     }
 
     if (!config.sslCertificateFile.empty()) {
-        ctx->load_verify_file(config.sslCertificateFile);
+        ssl_ctx_->load_verify_file(config.sslCertificateFile);
     }
 
     if (!config.sslCiphers.empty()) {
@@ -75,10 +78,10 @@ std::unique_ptr<ssl::context> HttpsClient::Impl::createSslContext(const External
                 ciphers += ":";
             ciphers += cipher;
         }
-        SSL_CTX_set_cipher_list(ctx->native_handle(), ciphers.c_str());
+        SSL_CTX_set_cipher_list(ssl_ctx_->native_handle(), ciphers.c_str());
     }
 
-    return ctx;
+    return std::move(ssl_ctx_);
 }
 
 void HttpsClient::Impl::initialize(size_t threads) {

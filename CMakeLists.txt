@@ -41,7 +41,8 @@ set(SOURCES
     src/http_session.cpp
     $<$<PLATFORM_ID:Darwin>:src/apple/ssl_context_builder.cpp>
     $<$<PLATFORM_ID:Windows>:src/windows/ssl_context_builder.cpp>
-    $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>>:src/default/ssl_context_builder.cpp>
+    $<$<PLATFORM_ID:Android>:src/android/ssl_context_builder.cpp>
+    $<$<AND:$<NOT:$<PLATFORM_ID:Darwin>>,$<NOT:$<PLATFORM_ID:Windows>>,$<NOT:$<PLATFORM_ID:Android>>>:src/default/ssl_context_builder.cpp>
 )
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include)

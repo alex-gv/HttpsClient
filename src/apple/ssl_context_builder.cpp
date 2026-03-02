@@ -20,11 +20,9 @@ class SSLCustomContextBuilder::Impl {
     void AddMacosSystemCertificates(boost::asio::ssl::context& ctx) {
         SSL_CTX* ssl_ctx = ctx.native_handle();
         X509_STORE* store = SSL_CTX_get_cert_store(ssl_ctx);
-
         if (!store) {
             throw std::runtime_error("Cannot get X509 store from SSL context");
         }
-
         AddCertificatesFromKeychain(store, kSecTrustSettingsDomainUser);
         AddCertificatesFromKeychain(store, kSecTrustSettingsDomainAdmin);
         AddCertificatesFromKeychain(store, kSecTrustSettingsDomainSystem);
