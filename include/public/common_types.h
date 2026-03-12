@@ -39,7 +39,7 @@ struct HTTPS_CLIENT_API Response {
     std::string errorMessage;
 
     bool isOk() const {
-        return status == 200;
+        return (status >= 200 && status <= 208) || status == 226;
     }
 
     std::string getHeader(const std::string& name, const std::string& defaultValue = "") const {
