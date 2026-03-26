@@ -1,35 +1,43 @@
-set(VCPKG_POLICY_EMPTY_PACKAGE enabled)
-
-vcpkg_from_github(
-    OUT_SOURCE_PATH SOURCE_PATH
-    REPO alex-gv/https_client
-    REF v${VERSION}
-    SHA512 23819081d4cefdd0f0ef19bc920a4be1de06700c3e6d83f4fc8d3ab33fad70047021e87ce5fa819fed41dd9e6b518646d5b69b1eff3fa3c6af0ce3b271270ff2
-    HEAD_REF main
-)
-
-vcpkg_cmake_configure(
-    SOURCE_PATH "${SOURCE_PATH}"
-)
-
-
-vcpkg_cmake_install()
-
-vcpkg_cmake_config_fixup(CONFIG_PATH lib/cmake/https_client)
-
-file(REMOVE_RECURSE
-    "${CURRENT_PACKAGES_DIR}/debug/include"
-    "${CURRENT_PACKAGES_DIR}/debug/share"
-    "${CURRENT_PACKAGES_DIR}/bin"
-    "${CURRENT_PACKAGES_DIR}/debug/bin"
-)
-
-if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/https_client.h"
-        "defined(HTTPS_CLIENT_SHARED)"
-        "0"
-    )
+if (TARGET https-client::https-client)
+    return()
 endif()
 
-configure_file("${CMAKE_CURRENT_LIST_DIR}/usage" "${CURRENT_PACKAGES_DIR}/share/${PORT}/usage" COPYONLY)
-file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/${PORT}-config.cmake" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
+get_filename_component(_IMPORT_PREFIX "${CMAKE_CURRENT_LIST_DIR}" DIRECTORY)
+get_filename_component(_IMPORT_PREFIX "${_IMPORT_PREFIX}" DIRECTORY)
+
+find_library(https-client_release_path
+            PATHS ${_IMPORT_PREFIX}
+            PATH_SUFFIXES lib
+            NAMES https_client
+            REQUIRED)
+
+find_library(https-client_debug_path
+            PATHS ${_IMPORT_PREFIX}
+            PATH_SUFFIXES debug/lib
+            NAMES https_client
+            REQUIRED)
+
+
+set(https-client_release_path_dll ${https-client_release_path})
+set(https-client_debug_path_dll ${https-client_debug_path})
+if (CMAKE_SYSTEM_NAME STREQUAL "Windows")
+    cmake_path(REPLACE_EXTENSION https-client_release_path_dll dll)
+    cmake_path(REPLACE_EXTENSION https-client_debug_path_dll dll)
+endif()
+
+add_library(https-client::https-client SHARED IMPORTED)
+
+set_target_properties(https-client::https-client PROPERTIES
+                    IMPORTED_LOCATION_RELEASE ${https-client_release_path_dll}
+                    IMPORTED_LOCATION_DEBUG ${https-client_debug_path_dll}
+                    IMPORTED_IMPLIB_RELEASE ${https-client_release_path}
+                    IMPORTED_IMPLIB_DEBUG ${https-client_debug_path}
+                    IMPORTED_NO_SONAME ON)
+
+target_include_directories(https-client::https-client INTERFACE ${_IMPORT_PREFIX}/include)
+
+unset(_IMPORT_PREFIX)
+unset(https-client_release_path)
+unset(https-client_debug_path)
+unset(https-client_release_path_dll)
+unset(https-client_debug_path_dll)

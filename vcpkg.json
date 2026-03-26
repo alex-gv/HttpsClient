@@ -1,5 +1,5 @@
 {
-  "version-string": "1.0.1",
+  "version-string": "1.0.4",
   "dependencies": [
     "boost-system",
     "boost-regex",
