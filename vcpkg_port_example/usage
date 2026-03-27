@@ -1,0 +1,4 @@
+http-client provides CMake targets:
+
+find_package(http-client REQUIRED)
+target_link_libraries(main PRIVATE http-client::http-client)

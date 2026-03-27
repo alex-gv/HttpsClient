@@ -34,7 +34,7 @@ set_target_properties(https-client::https-client PROPERTIES
                     IMPORTED_IMPLIB_DEBUG ${https-client_debug_path}
                     IMPORTED_NO_SONAME ON)
 
-target_include_directories(https-client::https-client INTERFACE ${_IMPORT_PREFIX}/include)
+target_include_directories(https-client::https-client INTERFACE ${_IMPORT_PREFIX}/include/https-client)
 
 unset(_IMPORT_PREFIX)
 unset(https-client_release_path)

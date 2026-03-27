@@ -16,7 +16,7 @@
  *  THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND.
  */
 #pragma once
-#include "public/https_client_export.h"
+#include "https_client_export.h"
 
 #include <string>
 #include <vector>

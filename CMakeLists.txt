@@ -73,6 +73,9 @@ target_include_directories(https_client
 )
 
 if(APPLE)
+    if (CMAKE_SYSTEM_NAME MATCHES "Darwin" AND NOT IOS AND NOT TVOS AND NOT WATCHOS)
+        add_compile_definitions(___OSX___)  # only for MacOS
+    endif()
     find_library(COREFOUNDATION_LIBRARY CoreFoundation)
     find_library(SECURITY_LIBRARY Security)
 endif()
@@ -115,7 +118,7 @@ install(TARGETS https_client
 )
 
 install(FILES ${HEADERS_PUBLIC}
-    DESTINATION include
+    DESTINATION include/https_client
 )
 
 install(EXPORT https_clientTargets

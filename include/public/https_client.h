@@ -18,8 +18,8 @@
 
 #pragma once
 
-#include "public/https_client_export.h"
-#include "public/common_types.h"
+#include "https_client_export.h"
+#include "common_types.h"
 #include <future>
 
 namespace https_client {

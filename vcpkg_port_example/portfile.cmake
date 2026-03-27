@@ -12,7 +12,6 @@ vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
 )
 
-
 # vcpkg_cmake_configure(
 #     SOURCE_PATH "${SOURCE_PATH}"
 #     OPTIONS
@@ -32,7 +31,7 @@ file(REMOVE_RECURSE
 )
 
 if(VCPKG_LIBRARY_LINKAGE STREQUAL "static")
-    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/https_client.h"
+    vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/include/https_client/https_client.h"
         "defined(HTTPS_CLIENT_SHARED)"
         "0"
     )
