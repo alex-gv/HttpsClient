@@ -60,6 +60,7 @@ private:
     void onProxyResolve(boost::asio::ip::tcp::resolver::results_type targetResults,
                         boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type proxyResults);
     void onProxyConnect(boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type::endpoint_type endpoint);
+    void onProxyHandshake(boost::beast::error_code ec);
     void onResolveTarget(boost::asio::ip::tcp::resolver::results_type results);
     void onConnect(boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type::endpoint_type endpoint);
     void onHandshake(boost::beast::error_code ec);
@@ -90,6 +91,8 @@ private:
     std::unique_ptr<boost::beast::tcp_stream> tcpStream_;
     std::unique_ptr<boost::beast::ssl_stream<boost::beast::tcp_stream>> sslStream_;
     boost::beast::tcp_stream* stream_{nullptr};
+
+    std::unique_ptr<boost::beast::ssl_stream<boost::beast::tcp_stream>> proxySslStream_;
 
     bool isHttps_{false};
     UrlParts urlParts_;

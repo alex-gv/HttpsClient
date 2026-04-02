@@ -76,11 +76,12 @@ struct HTTPS_CLIENT_API ProxyConfig {
     std::string port;
     std::string username;
     std::string password;
+    bool useHttps{false};  // Если true, использовать TLS для подключения к прокси
 
     ProxyConfig() = default;
     ProxyConfig(const std::string& host, const std::string& port,
-                const std::string& username = "", const std::string& password = "")
-        : host(host), port(port), username(username), password(password) {}
+                const std::string& username = "", const std::string& password = "", bool useHttps = false)
+        : host(host), port(port), username(username), password(password), useHttps(useHttps) {}
 
     bool isEnabled() const { return !host.empty() && !port.empty(); }
 };
