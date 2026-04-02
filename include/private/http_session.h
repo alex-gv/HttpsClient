@@ -57,6 +57,10 @@ private:
     void finishSuccess();
 
     void onResolve(boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type results);
+    void onProxyResolve(boost::asio::ip::tcp::resolver::results_type targetResults,
+                        boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type proxyResults);
+    void onProxyConnect(boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type::endpoint_type endpoint);
+    void onResolveTarget(boost::asio::ip::tcp::resolver::results_type results);
     void onConnect(boost::beast::error_code ec, boost::asio::ip::tcp::resolver::results_type::endpoint_type endpoint);
     void onHandshake(boost::beast::error_code ec);
     void sendRequest();
@@ -66,6 +70,11 @@ private:
 
     UrlParts parseUrl(const std::string& url);
     std::string getBodyString(const ExternalRequestConfig& config);
+
+    void sendProxyConnectRequest();
+    void onProxyConnectWrite(boost::beast::error_code ec, std::size_t bytesWritten);
+    void onProxyConnectRead(boost::beast::error_code ec, std::size_t bytesRead);
+    std::string buildProxyAuthorizationHeader(const std::string& username, const std::string& password);
 
 private:
     boost::asio::io_context& ioc_;
@@ -88,6 +97,11 @@ private:
     boost::beast::http::request<boost::beast::http::string_body> request_;
     boost::beast::http::response<boost::beast::http::dynamic_body> httpResponse_;
     boost::beast::flat_buffer buffer_;
+
+    boost::beast::http::request<boost::beast::http::string_body> proxyConnectRequest_;
+    boost::beast::http::response<boost::beast::http::dynamic_body> proxyConnectResponse_;
+
+    boost::asio::ip::tcp::resolver::results_type proxyTargetResults_;
 
     std::atomic<bool> finished_{false};
 };

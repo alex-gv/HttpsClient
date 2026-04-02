@@ -71,6 +71,20 @@ struct HTTPS_CLIENT_API RequestConfig {
     RequestConfig() = default;
 };
 
+struct HTTPS_CLIENT_API ProxyConfig {
+    std::string host;
+    std::string port;
+    std::string username;
+    std::string password;
+
+    ProxyConfig() = default;
+    ProxyConfig(const std::string& host, const std::string& port,
+                const std::string& username = "", const std::string& password = "")
+        : host(host), port(port), username(username), password(password) {}
+
+    bool isEnabled() const { return !host.empty() && !port.empty(); }
+};
+
 struct HTTPS_CLIENT_API ExternalRequestConfig : public RequestConfig {
     ExternalRequestConfig()= default;
     ExternalRequestConfig(const RequestConfig& cfg, Method method) {
@@ -93,6 +107,7 @@ struct HTTPS_CLIENT_API ExternalRequestConfig : public RequestConfig {
     ExternalRequestConfig(const std::string& url, Method method) : RequestConfig(url), method(method) {}
 
     Method method{Method::GET};
+    ProxyConfig proxy;
 };
 
 using ResponseCallback = std::function<void(const Response&)>;

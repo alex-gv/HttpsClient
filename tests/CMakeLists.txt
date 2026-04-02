@@ -17,6 +17,7 @@ add_executable(https_client_tests
     test_async_requests.cpp
     test_parallel.cpp
     test_error_handling.cpp
+    test_proxy.cpp
 )
 
 if(WIN32)

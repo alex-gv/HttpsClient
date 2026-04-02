@@ -13,7 +13,8 @@
 #include <boost/regex.hpp>
 #include <iomanip>
 #include <chrono>
-
+#include <sstream>
+#include <stdexcept>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -24,6 +25,36 @@ using tcp = net::ip::tcp;
 namespace https_client {
 
 namespace {
+
+std::string base64Encode(const std::string& input) {
+    static const char* base64Chars =
+        "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+        "abcdefghijklmnopqrstuvwxyz"
+        "0123456789+/";
+
+    std::string result;
+    int val = 0;
+    int valb = -6;
+
+    for (unsigned char c : input) {
+        val = (val << 8) + c;
+        valb += 8;
+        while (valb >= 0) {
+            result.push_back(base64Chars[(val >> valb) & 0x3F]);
+            valb -= 6;
+        }
+    }
+
+    if (valb > -6) {
+        result.push_back(base64Chars[((val << 8) >> (valb + 8)) & 0x3F]);
+    }
+
+    while (result.size() % 4) {
+        result.push_back('=');
+    }
+
+    return result;
+}
 
 std::string urlEncode(const std::string& value) {
     std::ostringstream escaped;
@@ -236,6 +267,31 @@ void HttpSession::onResolve(beast::error_code ec, tcp::resolver::results_type re
 
     logger_.info("DNS resolved for " + urlParts_.host + " with " + std::to_string(results.size()) + " endpoints");
 
+    // Если используется proxy, подключаемся к proxy, а не к целевому хосту
+    if (config_.proxy.isEnabled()) {
+        logger_.info("Using proxy: " + config_.proxy.host + ":" + config_.proxy.port);
+        resolver_.async_resolve(config_.proxy.host, config_.proxy.port,
+                                beast::bind_front_handler(&HttpSession::onProxyResolve, shared_from_this(), results));
+        return;
+    }
+
+    // Без proxy - подключаемся напрямую к целевому хосту
+    onResolveTarget(results);
+}
+
+void HttpSession::onProxyResolve(tcp::resolver::results_type targetResults,
+                                  beast::error_code ec, tcp::resolver::results_type proxyResults) {
+    if (ec) {
+        logger_.error("Proxy DNS resolution failed for " + config_.proxy.host + ": " + ec.message());
+        finishWithError("Proxy resolve failed: " + ec.message());
+        return;
+    }
+
+    logger_.info("Proxy DNS resolved for " + config_.proxy.host);
+
+    // Сохраняем результаты резолвинга целевого хоста для использования в CONNECT
+    proxyTargetResults_ = targetResults;
+
     if (isHttps_) {
         sslStream_ = std::make_unique<beast::ssl_stream<beast::tcp_stream>>(net::make_strand(ioc_), *sslCtx_);
         stream_ = &sslStream_->next_layer();
@@ -253,9 +309,128 @@ void HttpSession::onResolve(beast::error_code ec, tcp::resolver::results_type re
     }
 
     stream_->expires_after(std::chrono::seconds(config_.connectTimeoutSeconds));
+    logger_.info("Connecting to proxy " + config_.proxy.host + ":" + config_.proxy.port);
+
+    stream_->async_connect(proxyResults,
+                           beast::bind_front_handler(&HttpSession::onProxyConnect, shared_from_this()));
+}
+
+void HttpSession::onProxyConnect(beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
+    if (ec) {
+        logger_.error("Proxy connection failed to " + config_.proxy.host + ":" + config_.proxy.port + ": " + ec.message());
+        finishWithError("Proxy connect failed: " + ec.message());
+        return;
+    }
+
+    logger_.info("Connected to proxy: " + endpoint.address().to_string() + ":" + std::to_string(endpoint.port()));
+
+    // Отправляем CONNECT запрос к proxy
+    sendProxyConnectRequest();
+}
+
+void HttpSession::onResolveTarget(tcp::resolver::results_type results) {
+    if (isHttps_) {
+        sslStream_ = std::make_unique<beast::ssl_stream<beast::tcp_stream>>(net::make_strand(ioc_), *sslCtx_);
+        stream_ = &sslStream_->next_layer();
+        if (!SSL_set_tlsext_host_name(sslStream_->native_handle(), urlParts_.host.c_str())) {
+            beast::error_code ec = beast::error_code(static_cast<int>(::ERR_get_error()), net::error::get_ssl_category());
+            logger_.error("SSL SNI setup failed for " + urlParts_.host);
+            finishWithError("SSL SNI failed: " + ec.message());
+            return;
+        }
+        logger_.debug("SSL stream created for HTTPS connection");
+    } else {
+        tcpStream_ = std::make_unique<beast::tcp_stream>(net::make_strand(ioc_));
+        stream_ = tcpStream_.get();
+        logger_.debug("TCP stream created for HTTP connection");
+    }
+
+    stream_->expires_after(std::chrono::seconds(config_.connectTimeoutSeconds));
     logger_.info("Attempting connection to " + urlParts_.host + ":" + urlParts_.port);
 
     stream_->async_connect(results, beast::bind_front_handler(&HttpSession::onConnect, shared_from_this()));
+}
+
+void HttpSession::sendProxyConnectRequest() {
+    // Формируем CONNECT запрос к proxy
+    // Метод CONNECT всегда использует HTTP/1.1
+    proxyConnectRequest_.version(11);
+    proxyConnectRequest_.method(http::verb::connect);
+
+    // Target для CONNECT - это host:port целевого сервера
+    std::string target = urlParts_.host + ":" + urlParts_.port;
+    proxyConnectRequest_.target(target);
+
+    // Host header для proxy
+    proxyConnectRequest_.set(http::field::host, target);
+    proxyConnectRequest_.set(http::field::user_agent, config_.userAgent);
+    proxyConnectRequest_.set(http::field::proxy_connection, "close");
+
+    // Добавляем Proxy-Authorization если есть credentials
+    if (!config_.proxy.username.empty() && !config_.proxy.password.empty()) {
+        std::string authHeader = buildProxyAuthorizationHeader(config_.proxy.username, config_.proxy.password);
+        proxyConnectRequest_.set(http::field::proxy_authorization, authHeader);
+        logger_.debug("Proxy-Authorization header added");
+    }
+
+    logger_.info("Sending CONNECT request to proxy for " + target);
+
+    stream_->expires_after(std::chrono::seconds(config_.timeoutSeconds));
+    http::async_write(*stream_, proxyConnectRequest_,
+                      beast::bind_front_handler(&HttpSession::onProxyConnectWrite, shared_from_this()));
+}
+
+void HttpSession::onProxyConnectWrite(beast::error_code ec, std::size_t /*bytesWritten*/) {
+    if (ec) {
+        logger_.error("Proxy CONNECT write failed: " + ec.message());
+        finishWithError("Proxy CONNECT write failed: " + ec.message());
+        return;
+    }
+
+    logger_.debug("CONNECT request sent to proxy");
+
+    stream_->expires_after(std::chrono::seconds(config_.timeoutSeconds));
+    http::async_read(*stream_, buffer_, proxyConnectResponse_,
+                     beast::bind_front_handler(&HttpSession::onProxyConnectRead, shared_from_this()));
+}
+
+void HttpSession::onProxyConnectRead(beast::error_code ec, std::size_t /*bytesRead*/) {
+    if (ec) {
+        logger_.error("Proxy CONNECT read failed: " + ec.message());
+        finishWithError("Proxy CONNECT read failed: " + ec.message());
+        return;
+    }
+
+    // Проверяем ответ от proxy
+    auto status = proxyConnectResponse_.result_int();
+    logger_.info("Proxy CONNECT response status: " + std::to_string(status));
+
+    if (status != 200) {
+        std::string reason = std::string(proxyConnectResponse_.reason());
+        logger_.error("Proxy CONNECT failed with status " + std::to_string(status) + ": " + reason);
+        finishWithError("Proxy CONNECT failed: " + std::to_string(status) + " " + reason);
+        return;
+    }
+
+    logger_.info("Proxy tunnel established successfully");
+
+    // Туннель установлен, теперь делаем SSL handshake для HTTPS
+    if (isHttps_) {
+        stream_->expires_after(std::chrono::seconds(config_.timeoutSeconds));
+        logger_.debug("Starting SSL handshake through proxy tunnel");
+        sslStream_->async_handshake(ssl::stream_base::client,
+                                    beast::bind_front_handler(&HttpSession::onHandshake, shared_from_this()));
+    } else {
+        // Для HTTP через proxy - просто отправляем запрос
+        logger_.debug("HTTP through proxy, sending request");
+        sendRequest();
+    }
+}
+
+std::string HttpSession::buildProxyAuthorizationHeader(const std::string& username, const std::string& password) {
+    // Basic auth: base64(username:password)
+    std::string credentials = username + ":" + password;
+    return "Basic " + base64Encode(credentials);
 }
 
 void HttpSession::onConnect(beast::error_code ec, tcp::resolver::results_type::endpoint_type endpoint) {
