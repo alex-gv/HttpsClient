@@ -17,6 +17,7 @@
 #include <iostream>
 #include <chrono>
 #include <memory>
+#include <mutex>
 
 namespace beast = boost::beast;
 namespace http = beast::http;
