@@ -22,6 +22,7 @@
 #include <vector>
 #include <functional>
 #include <any>
+#include <unordered_map>
 
 namespace https_client {
 
@@ -87,24 +88,9 @@ struct HTTPS_CLIENT_API ProxyConfig {
 };
 
 struct HTTPS_CLIENT_API ExternalRequestConfig : public RequestConfig {
-    ExternalRequestConfig()= default;
-    ExternalRequestConfig(const RequestConfig& cfg, Method method) {
-        this->url = cfg.url;
-        this->body = cfg.body;
-        this->contentType = cfg.contentType;
-        this->headers = cfg.headers;
-        this->queryParams = cfg.queryParams;
-        this->formData = cfg.formData;
-        this->userAgent = cfg.userAgent;
-        this->timeoutSeconds = cfg.timeoutSeconds;
-        this->connectTimeoutSeconds = cfg.connectTimeoutSeconds;
-        this->followRedirects = cfg.followRedirects;
-        this->maxRedirects = cfg.maxRedirects;
-        this->verifySsl = cfg.verifySsl;
-        this->sslCertificateFile = cfg.sslCertificateFile;
-        this->sslCiphers = cfg.sslCiphers;
-        this->method = method;
-    }
+    ExternalRequestConfig() = default;
+    ExternalRequestConfig(const RequestConfig& cfg, Method method)
+        : RequestConfig(cfg), method(method) {}
     ExternalRequestConfig(const std::string& url, Method method) : RequestConfig(url), method(method) {}
 
     Method method{Method::GET};

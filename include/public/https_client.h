@@ -20,6 +20,7 @@
 
 #include "https_client_export.h"
 #include "common_types.h"
+#include <vector>
 #include <future>
 
 namespace https_client {

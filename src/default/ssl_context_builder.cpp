@@ -5,6 +5,10 @@
 #include <vector>
 
 namespace https_client {
+
+SSLCustomContextBuilder::SSLCustomContextBuilder() : impl_(std::make_unique<Impl>()) {}
+SSLCustomContextBuilder::~SSLCustomContextBuilder() = default;
+
 class SSLCustomContextBuilder::Impl {
  public:
     std::unique_ptr<boost::asio::ssl::context> CreateContext(boost::asio::ssl::context_base::method method) {
@@ -51,8 +55,12 @@ class SSLCustomContextBuilder::Impl {
     }
 };
 
+
 std::unique_ptr<boost::asio::ssl::context> SSLCustomContextBuilder::CreateContext(
     boost::asio::ssl::context_base::method method) {
+    if (!impl_) {
+        throw std::runtime_error("SSLCustomContextBuilder is not initialized");
+    }
     return impl_->CreateContext(method);
 };
 
