@@ -102,6 +102,9 @@ class SSLCustomContextBuilder::Impl {
 
 std::unique_ptr<boost::asio::ssl::context> SSLCustomContextBuilder::CreateContext(
     boost::asio::ssl::context_base::method method) {
+    if (!impl_) {
+        throw std::runtime_error("SSLCustomContextBuilder is not initialized");
+    }
     return impl_->CreateContext(method);
 };
 

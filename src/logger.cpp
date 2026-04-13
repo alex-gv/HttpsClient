@@ -18,10 +18,9 @@ namespace https_client {
 Logger::Logger(LogCallback callback) : callback_(std::move(callback)) {}
 
 void Logger::log(LogLevel level, const std::string& message) {
-    std::string formatted_message = formatMessage(level, message);
     std::shared_lock<std::shared_mutex> lock(mutex_);
     if (callback_) {
-        callback_(level, formatted_message);
+        callback_(level, formatMessage(level, message));
     }
 }
 
