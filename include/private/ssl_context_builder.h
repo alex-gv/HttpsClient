@@ -24,11 +24,14 @@
 namespace https_client {
 class SSLCustomContextBuilder {
  public:
+    SSLCustomContextBuilder();
+    ~SSLCustomContextBuilder();
+
     std::unique_ptr<boost::asio::ssl::context> CreateContext(boost::asio::ssl::context_base::method method);
 
  private:
     class Impl;
-    Impl* impl_;
+    std::unique_ptr<Impl> impl_;
 };
 
 }  // namespace https_client

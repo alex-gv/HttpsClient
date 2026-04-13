@@ -22,7 +22,7 @@
 
 #include <string>
 #include <functional>
-#include <mutex>
+#include <shared_mutex>
 
 namespace https_client {
 
@@ -50,7 +50,7 @@ class Logger {
 
  private:
     LogCallback callback_;
-    std::mutex mutex_;
+    mutable std::shared_mutex mutex_;
 };
 
 }  // namespace https_client

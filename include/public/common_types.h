@@ -22,6 +22,7 @@
 #include <vector>
 #include <functional>
 #include <any>
+#include <unordered_map>
 
 namespace https_client {
 

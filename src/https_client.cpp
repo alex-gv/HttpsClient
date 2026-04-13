@@ -48,27 +48,24 @@ class HttpsClient::Impl {
     net::executor_work_guard<net::io_context::executor_type> work_guard_;
     std::vector<std::thread> threads_;
     Logger logger_;
-    std::unique_ptr<ssl::context> ssl_ctx_;
 };
 
 // Static helper function implementations
 std::unique_ptr<ssl::context> HttpsClient::Impl::createSslContext(const ExternalRequestConfig& config) {
-    if (!ssl_ctx_) {
-        SSLCustomContextBuilder ctx_builder;
-        ssl_ctx_ = ctx_builder.CreateContext(ssl::context::tls_client);
-    }
+    SSLCustomContextBuilder ctx_builder;
+    std::unique_ptr<ssl::context> ssl_ctx = ctx_builder.CreateContext(ssl::context::tls_client);
 
-    ssl_ctx_->set_default_verify_paths();
-    ssl_ctx_->set_options(ssl::context::default_workarounds);
+    ssl_ctx->set_default_verify_paths();
+    ssl_ctx->set_options(ssl::context::default_workarounds);
 
     if (config.verifySsl) {
-        ssl_ctx_->set_verify_mode(ssl::verify_peer | ssl::verify_fail_if_no_peer_cert);
+        ssl_ctx->set_verify_mode(ssl::verify_peer | ssl::verify_fail_if_no_peer_cert);
     } else {
-        ssl_ctx_->set_verify_mode(ssl::verify_none);
+        ssl_ctx->set_verify_mode(ssl::verify_none);
     }
 
     if (!config.sslCertificateFile.empty()) {
-        ssl_ctx_->load_verify_file(config.sslCertificateFile);
+        ssl_ctx->load_verify_file(config.sslCertificateFile);
     }
 
     if (!config.sslCiphers.empty()) {
@@ -78,10 +75,10 @@ std::unique_ptr<ssl::context> HttpsClient::Impl::createSslContext(const External
                 ciphers += ":";
             ciphers += cipher;
         }
-        SSL_CTX_set_cipher_list(ssl_ctx_->native_handle(), ciphers.c_str());
+        SSL_CTX_set_cipher_list(ssl_ctx->native_handle(), ciphers.c_str());
     }
 
-    return std::move(ssl_ctx_);
+    return std::move(ssl_ctx);
 }
 
 void HttpsClient::Impl::initialize(size_t threads) {
@@ -131,7 +128,7 @@ void HttpsClient::Impl::setLogCallback(LogCallback callback) {
 
 // Async request execution methods
 void HttpsClient::Impl::executeRequestAsync(const ExternalRequestConfig& config, ResponseCallback callback) {
-    logger_.debug("Queueing " + methodToString(config.method)+ " request to: " + config.url);
+    logger_.debug("Queueing " + methodToString(config.method) + " request to: " + config.url);
     auto ssl_ctx = createSslContext(config);
     auto session = std::make_shared<HttpSession>(ioc_, std::move(ssl_ctx), config, std::move(callback), logger_);
     session->run();
@@ -188,18 +185,17 @@ Response HttpsClient::Impl::executeRequest(const ExternalRequestConfig& config) 
     response.url = config.url;
 
     try {
-        auto ssl_ctx = HttpsClient::Impl::createSslContext(config);
+        auto ssl_ctx = createSslContext(config);
 
         std::promise<Response> promise;
         std::future<Response> future = promise.get_future();
 
-        bool callback_called = false;
+        std::atomic<bool> callback_called{false};
 
         auto session = std::make_shared<HttpSession>(
             ioc_, std::move(ssl_ctx), config,
             [&promise, &callback_called](const Response& resp) {
-                if (!callback_called) {
-                    callback_called = true;
+                if (!callback_called.exchange(true)) {
                     promise.set_value(resp);
                 }
             },
@@ -236,62 +232,62 @@ void HttpsClient::setLogCallback(LogCallback callback) {
 }
 
 Response HttpsClient::get(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::GET);
+    ExternalRequestConfig new_config(config, Method::GET);
     return impl_->executeRequest(new_config);
 }
 
 Response HttpsClient::post(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::POST);
+    ExternalRequestConfig new_config(config, Method::POST);
     return impl_->executeRequest(new_config);
 }
 
 Response HttpsClient::put(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::PUT);
+    ExternalRequestConfig new_config(config, Method::PUT);
     return impl_->executeRequest(new_config);
 }
 
 Response HttpsClient::del(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::DELETE_);
+    ExternalRequestConfig new_config(config, Method::DELETE_);
     return impl_->executeRequest(new_config);
 }
 
 void HttpsClient::getAsync(const RequestConfig& config, ResponseCallback callback) {
-    ExternalRequestConfig new_config(config,  Method::GET);
+    ExternalRequestConfig new_config(config, Method::GET);
     impl_->executeRequestAsync(new_config, std::move(callback));
 }
 
 void HttpsClient::postAsync(const RequestConfig& config, ResponseCallback callback) {
-    ExternalRequestConfig new_config(config,  Method::POST);
+    ExternalRequestConfig new_config(config, Method::POST);
     impl_->executeRequestAsync(new_config, std::move(callback));
 }
 
 void HttpsClient::putAsync(const RequestConfig& config, ResponseCallback callback) {
-    ExternalRequestConfig new_config(config,  Method::PUT);
+    ExternalRequestConfig new_config(config, Method::PUT);
     impl_->executeRequestAsync(new_config, std::move(callback));
 }
 
 void HttpsClient::deleteAsync(const RequestConfig& config, ResponseCallback callback) {
-    ExternalRequestConfig new_config(config,  Method::DELETE_);
+    ExternalRequestConfig new_config(config, Method::DELETE_);
     impl_->executeRequestAsync(new_config, std::move(callback));
 }
 
 std::future<Response> HttpsClient::getAsync(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::GET);
+    ExternalRequestConfig new_config(config, Method::GET);
     return impl_->executeRequestWithFuture(new_config);
 }
 
 std::future<Response> HttpsClient::postAsync(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::POST);
+    ExternalRequestConfig new_config(config, Method::POST);
     return impl_->executeRequestWithFuture(new_config);
 }
 
 std::future<Response> HttpsClient::putAsync(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::PUT);
+    ExternalRequestConfig new_config(config, Method::PUT);
     return impl_->executeRequestWithFuture(new_config);
 }
 
 std::future<Response> HttpsClient::deleteAsync(const RequestConfig& config) {
-    ExternalRequestConfig new_config(config,  Method::DELETE_);
+    ExternalRequestConfig new_config(config, Method::DELETE_);
     return impl_->executeRequestWithFuture(new_config);
 }
 

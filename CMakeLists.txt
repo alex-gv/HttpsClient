@@ -83,7 +83,7 @@ endif()
 if(WIN32)
     set_target_properties(https_client PROPERTIES
         DEFINE_SYMBOL "HTTPS_CLIENT_BUILDING_DLL"
-        CXX_STANDARD 23
+        CXX_STANDARD 17
         CXX_STANDARD_REQUIRED ON
         CXX_EXTENSIONS OFF
         POSITION_INDEPENDENT_CODE TRUE

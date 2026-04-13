@@ -7,7 +7,7 @@
 #include "private/logger.h"
 #include <iostream>
 #include <functional>
-#include <mutex>
+#include <shared_mutex>
 #include <chrono>
 #include <thread>
 #include <iomanip>
@@ -19,6 +19,7 @@ Logger::Logger(LogCallback callback) : callback_(std::move(callback)) {}
 
 void Logger::log(LogLevel level, const std::string& message) {
     std::string formatted_message = formatMessage(level, message);
+    std::shared_lock<std::shared_mutex> lock(mutex_);
     if (callback_) {
         callback_(level, formatted_message);
     }
@@ -26,7 +27,7 @@ void Logger::log(LogLevel level, const std::string& message) {
 
 
 void Logger::setCallback(LogCallback callback) {
-    std::lock_guard<std::mutex> lock(mutex_);
+    std::unique_lock<std::shared_mutex> lock(mutex_);
     callback_ = std::move(callback);
 }
 std::string Logger::getCurrentTimestamp() {
