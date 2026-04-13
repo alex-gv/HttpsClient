@@ -33,7 +33,7 @@ namespace https_client {
 class HttpSession : public std::enable_shared_from_this<HttpSession> {
 public:
     HttpSession(boost::asio::io_context& ioc,
-                std::unique_ptr<boost::asio::ssl::context> sslCtx,
+                std::shared_ptr<boost::asio::ssl::context> sslCtx,
                 const ExternalRequestConfig& config,
                 ResponseCallback callback,
                 Logger& logger);
@@ -79,7 +79,7 @@ private:
 
 private:
     boost::asio::io_context& ioc_;
-    std::unique_ptr<boost::asio::ssl::context> sslCtx_;
+    std::shared_ptr<boost::asio::ssl::context> sslCtx_;
     ExternalRequestConfig config_;
     ResponseCallback callback_;
     Logger& logger_;

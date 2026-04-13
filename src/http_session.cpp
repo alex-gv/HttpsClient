@@ -107,7 +107,7 @@ static http::verb methodToBoostVerb(Method method) {
     }
 }
 
-HttpSession::HttpSession(net::io_context& ioc, std::unique_ptr<ssl::context> sslCtx,
+HttpSession::HttpSession(net::io_context& ioc, std::shared_ptr<ssl::context> sslCtx,
                          const ExternalRequestConfig& config, ResponseCallback callback, Logger& logger)
     : ioc_(ioc),
       sslCtx_(std::move(sslCtx)),
@@ -586,7 +586,7 @@ void HttpSession::onRead(beast::error_code ec, std::size_t bytesRead) {
             cancelTimeout();
             closeConnection();
 
-            auto session = std::make_shared<HttpSession>(ioc_, std::move(sslCtx_), newConfig, callback_, logger_);
+            auto session = std::make_shared<HttpSession>(ioc_, sslCtx_, newConfig, callback_, logger_);
             session->run();
             return;
         }
