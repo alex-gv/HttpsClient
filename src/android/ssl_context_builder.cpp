@@ -12,9 +12,6 @@ namespace fs = std::filesystem;
 
 namespace https_client {
 
-SSLCustomContextBuilder::SSLCustomContextBuilder() : impl_(std::make_unique<Impl>()) {}
-SSLCustomContextBuilder::~SSLCustomContextBuilder() = default;
-
 class SSLCustomContextBuilder::Impl {
  public:
     std::unique_ptr<boost::asio::ssl::context> CreateContext(boost::asio::ssl::context_base::method method) {
@@ -121,6 +118,10 @@ class SSLCustomContextBuilder::Impl {
         return false;
     }
 };
+
+
+SSLCustomContextBuilder::SSLCustomContextBuilder() : impl_(std::make_unique<Impl>()) {}
+SSLCustomContextBuilder::~SSLCustomContextBuilder() = default;
 
 
 std::unique_ptr<boost::asio::ssl::context> SSLCustomContextBuilder::CreateContext(

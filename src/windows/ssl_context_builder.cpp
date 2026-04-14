@@ -11,9 +11,6 @@
 
 namespace https_client {
 
-SSLCustomContextBuilder::SSLCustomContextBuilder() : impl_(std::make_unique<Impl>()) {}
-SSLCustomContextBuilder::~SSLCustomContextBuilder() = default;
-
 class SSLCustomContextBuilder::Impl {
  public:
 
@@ -91,6 +88,9 @@ class SSLCustomContextBuilder::Impl {
         }
     }
 };
+
+SSLCustomContextBuilder::SSLCustomContextBuilder() : impl_(std::make_unique<Impl>()) {}
+SSLCustomContextBuilder::~SSLCustomContextBuilder() = default;
 
 
 std::unique_ptr<boost::asio::ssl::context> SSLCustomContextBuilder::CreateContext(
