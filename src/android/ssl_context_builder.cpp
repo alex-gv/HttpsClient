@@ -106,7 +106,7 @@ class SSLCustomContextBuilder::Impl {
         X509_NAME_oneline(X509_get_subject_name(cert.get()), subject, sizeof(subject) - 1);
         std::string subject_str(subject);
 
-        if (subject_str.find("Russian") != std::string::npos) {
+        if (subject_str.find("The Ministry of Digital Development and Communications") != std::string::npos) {
             try {
                 std::string pem = BioToString(bio.get());
                 ctx.add_certificate_authority(boost::asio::buffer(pem.data(), pem.size()));
