@@ -12,6 +12,13 @@ namespace fs = std::filesystem;
 
 namespace https_client {
 
+std::string BioToString(BIO* bio) {
+    BUF_MEM* mem = nullptr;
+    BIO_get_mem_ptr(bio, &mem);
+    if (!mem || !mem->data || !mem->length <= 0)
+        return std::string();
+    return std::string(mem->data, mem->length);
+}
 class SSLCustomContextBuilder::Impl {
  public:
     std::unique_ptr<boost::asio::ssl::context> CreateContext(boost::asio::ssl::context_base::method method) {
@@ -119,10 +126,8 @@ class SSLCustomContextBuilder::Impl {
     }
 };
 
-
 SSLCustomContextBuilder::SSLCustomContextBuilder() : impl_(std::make_unique<Impl>()) {}
 SSLCustomContextBuilder::~SSLCustomContextBuilder() = default;
-
 
 std::unique_ptr<boost::asio::ssl::context> SSLCustomContextBuilder::CreateContext(
     boost::asio::ssl::context_base::method method) {
