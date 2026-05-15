@@ -24,6 +24,12 @@
 #endif
 #include <windows.h>
 #include <security.h>
+#elif defined(HTTPS_CLIENT_HAS_GSSAPI)
+#ifdef __APPLE__
+#include <GSS/GSS.h>
+#else
+#include <gssapi/gssapi.h>
+#endif
 #endif
 
 namespace beast = boost::beast;
@@ -147,7 +153,7 @@ std::string buildQueryString(const std::unordered_map<std::string, std::string>&
 }
 }  // namespace
 
-struct HttpSession::WindowsProxyAuthContext {
+struct HttpSession::PlatformProxyAuthContext {
 #ifdef _WIN32
     CredHandle credentials{};
     CtxtHandle context{};
@@ -159,7 +165,7 @@ struct HttpSession::WindowsProxyAuthContext {
     std::string password;
     SEC_WINNT_AUTH_IDENTITY_A identity{};
 
-    ~WindowsProxyAuthContext() {
+    ~PlatformProxyAuthContext() {
         if (hasContext) {
             DeleteSecurityContext(&context);
         }
@@ -258,13 +264,127 @@ private:
         return stream.str();
     }
 #else
-    void acquire(const std::string&, const std::string&, const std::string&) {
-        throw std::runtime_error("Windows proxy authentication is only supported on Windows");
+#ifdef HTTPS_CLIENT_HAS_GSSAPI
+    gss_ctx_id_t context{GSS_C_NO_CONTEXT};
+    gss_name_t targetName{GSS_C_NO_NAME};
+
+    ~PlatformProxyAuthContext() {
+        OM_uint32 minor = 0;
+        if (context != GSS_C_NO_CONTEXT) {
+            gss_delete_sec_context(&minor, &context, GSS_C_NO_BUFFER);
+        }
+        if (targetName != GSS_C_NO_NAME) {
+            gss_release_name(&minor, &targetName);
+        }
     }
 
-    std::string createToken(const std::string&, const std::string&, const std::string&) {
-        throw std::runtime_error("Windows proxy authentication is only supported on Windows");
+    void acquire(const std::string& packageName, const std::string& rawUsername, const std::string& rawPassword) {
+        if (packageName != "Kerberos") {
+            throw std::runtime_error(packageName + " proxy authentication is only supported on Windows");
+        }
+        if (!rawUsername.empty() || !rawPassword.empty()) {
+            throw std::runtime_error(
+                "Kerberos proxy authentication on GSSAPI platforms uses the current credential cache; "
+                "explicit username/password is not supported");
+        }
     }
+
+    std::string createToken(const std::string& packageName, const std::string& proxyHost, const std::string& challenge) {
+        if (packageName != "Kerberos") {
+            throw std::runtime_error(packageName + " proxy authentication is only supported on Windows");
+        }
+
+        ensureTargetName(proxyHost);
+
+        gss_buffer_desc inputToken{0, nullptr};
+        gss_buffer_t inputTokenPtr = GSS_C_NO_BUFFER;
+        if (!challenge.empty()) {
+            inputToken.length = challenge.size();
+            inputToken.value = const_cast<char*>(challenge.data());
+            inputTokenPtr = &inputToken;
+        }
+
+        gss_buffer_desc outputToken{0, nullptr};
+        OM_uint32 minor = 0;
+        OM_uint32 flags = GSS_C_MUTUAL_FLAG | GSS_C_REPLAY_FLAG;
+        OM_uint32 actualFlags = 0;
+        OM_uint32 status = gss_init_sec_context(&minor, GSS_C_NO_CREDENTIAL, &context, targetName, GSS_C_NO_OID, flags, 0,
+                                                GSS_C_NO_CHANNEL_BINDINGS, inputTokenPtr, nullptr, &outputToken,
+                                                &actualFlags, nullptr);
+
+        if (status != GSS_S_COMPLETE && status != GSS_S_CONTINUE_NEEDED) {
+            throw std::runtime_error("gss_init_sec_context(Kerberos) failed: " + gssErrorToString(status, minor));
+        }
+
+        std::string token;
+        if (outputToken.value && outputToken.length > 0) {
+            token.assign(static_cast<const char*>(outputToken.value), outputToken.length);
+            gss_release_buffer(&minor, &outputToken);
+        }
+
+        return token;
+    }
+
+private:
+    void ensureTargetName(const std::string& proxyHost) {
+        if (targetName != GSS_C_NO_NAME) {
+            return;
+        }
+
+        std::string serviceName = "HTTP@" + proxyHost;
+        gss_buffer_desc nameBuffer{};
+        nameBuffer.value = serviceName.data();
+        nameBuffer.length = serviceName.size();
+
+        OM_uint32 minor = 0;
+        OM_uint32 status = gss_import_name(&minor, &nameBuffer, GSS_C_NT_HOSTBASED_SERVICE, &targetName);
+        if (status != GSS_S_COMPLETE) {
+            throw std::runtime_error("gss_import_name(HTTP service) failed: " + gssErrorToString(status, minor));
+        }
+    }
+
+    static std::string displayStatus(OM_uint32 code, int type) {
+        std::string result;
+        OM_uint32 minor = 0;
+        OM_uint32 context = 0;
+
+        do {
+            gss_buffer_desc message{0, nullptr};
+            OM_uint32 status = gss_display_status(&minor, code, type, GSS_C_NO_OID, &context, &message);
+            if (status != GSS_S_COMPLETE) {
+                break;
+            }
+
+            if (!result.empty()) {
+                result += "; ";
+            }
+            result.append(static_cast<const char*>(message.value), message.length);
+            gss_release_buffer(&minor, &message);
+        } while (context != 0);
+
+        return result;
+    }
+
+    static std::string gssErrorToString(OM_uint32 major, OM_uint32 minor) {
+        std::string result = displayStatus(major, GSS_C_GSS_CODE);
+        std::string minorMessage = displayStatus(minor, GSS_C_MECH_CODE);
+        if (!minorMessage.empty()) {
+            if (!result.empty()) {
+                result += " / ";
+            }
+            result += minorMessage;
+        }
+        return result.empty() ? "unknown GSSAPI error" : result;
+    }
+#else
+    void acquire(const std::string& packageName, const std::string&, const std::string&) {
+        throw std::runtime_error(packageName + " proxy authentication is not available on this platform");
+    }
+
+    std::string createToken(const std::string& packageName, const std::string&, const std::string&) {
+        throw std::runtime_error(packageName + " proxy authentication is not available on this platform");
+    }
+#endif
 #endif
 };
 
@@ -548,13 +668,13 @@ void HttpSession::sendProxyConnectRequest() {
 
     proxyConnectRequest_.set(http::field::host, target);
     proxyConnectRequest_.set(http::field::user_agent, config_.userAgent);
-    proxyConnectRequest_.set(http::field::proxy_connection, isProxyWindowsAuth() ? "keep-alive" : "close");
+    proxyConnectRequest_.set(http::field::proxy_connection, isProxyPlatformAuth() ? "keep-alive" : "close");
 
-    if (isProxyWindowsAuth()) {
+    if (isProxyPlatformAuth()) {
         try {
-            std::string authHeader = buildProxyWindowsAuthHeader();
+            std::string authHeader = buildProxyPlatformAuthHeader();
             proxyConnectRequest_.set(http::field::proxy_authorization, authHeader);
-            logger_.debug("Windows Proxy-Authorization header added");
+            logger_.debug("Proxy platform authentication header added");
         } catch (const std::exception& e) {
             finishWithError(e.what());
             return;
@@ -606,7 +726,7 @@ void HttpSession::onProxyConnectRead(beast::error_code ec, std::size_t /*bytesRe
     auto status = proxyConnectResponse_.result_int();
     logger_.info("Proxy CONNECT response status: " + std::to_string(status));
 
-    if (status == 407 && isProxyWindowsAuth() && proxyAuthStep_ > 0 && proxyAuthStep_ < 3) {
+    if (status == 407 && isProxyPlatformAuth() && proxyAuthStep_ > 0 && proxyAuthStep_ < 3) {
         const std::string scheme = config_.proxy.authType == ProxyAuthType::Kerberos ? "Negotiate" : "NTLM";
         proxyAuthChallenge_ = extractProxyAuthChallenge(scheme);
         if (proxyAuthChallenge_.empty()) {
@@ -660,18 +780,18 @@ std::string HttpSession::buildProxyAuthorizationHeader(const std::string& userna
     return "Basic " + base64Encode(credentials);
 }
 
-bool HttpSession::isProxyWindowsAuth() const {
+bool HttpSession::isProxyPlatformAuth() const {
     return config_.proxy.authType == ProxyAuthType::NTLM || config_.proxy.authType == ProxyAuthType::Kerberos;
 }
 
-std::string HttpSession::buildProxyWindowsAuthHeader() {
+std::string HttpSession::buildProxyPlatformAuthHeader() {
     const bool useKerberos = config_.proxy.authType == ProxyAuthType::Kerberos;
     const std::string packageName = useKerberos ? "Kerberos" : "NTLM";
     const std::string headerScheme = useKerberos ? "Negotiate" : "NTLM";
 
-    if (!windowsProxyAuth_) {
-        windowsProxyAuth_ = std::make_unique<WindowsProxyAuthContext>();
-        windowsProxyAuth_->acquire(packageName, config_.proxy.username, config_.proxy.password);
+    if (!platformProxyAuth_) {
+        platformProxyAuth_ = std::make_unique<PlatformProxyAuthContext>();
+        platformProxyAuth_->acquire(packageName, config_.proxy.username, config_.proxy.password);
     }
 
     std::string challenge;
@@ -679,7 +799,7 @@ std::string HttpSession::buildProxyWindowsAuthHeader() {
         challenge = base64Decode(proxyAuthChallenge_);
     }
 
-    auto token = windowsProxyAuth_->createToken(packageName, config_.proxy.host, challenge);
+    auto token = platformProxyAuth_->createToken(packageName, config_.proxy.host, challenge);
     if (token.empty()) {
         throw std::runtime_error(packageName + " proxy authentication produced an empty token");
     }

@@ -77,12 +77,12 @@ private:
     void onProxyConnectWrite(boost::beast::error_code ec, std::size_t bytesWritten);
     void onProxyConnectRead(boost::beast::error_code ec, std::size_t bytesRead);
     std::string buildProxyAuthorizationHeader(const std::string& username, const std::string& password);
-    std::string buildProxyWindowsAuthHeader();
+    std::string buildProxyPlatformAuthHeader();
     std::string extractProxyAuthChallenge(const std::string& scheme) const;
-    bool isProxyWindowsAuth() const;
+    bool isProxyPlatformAuth() const;
 
 private:
-    struct WindowsProxyAuthContext;
+    struct PlatformProxyAuthContext;
 
     boost::asio::io_context& ioc_;
     std::shared_ptr<boost::asio::ssl::context> sslCtx_;
@@ -100,7 +100,7 @@ private:
 
     std::unique_ptr<boost::beast::ssl_stream<boost::beast::tcp_stream>> proxySslStream_;
     std::unique_ptr<boost::asio::ssl::context> proxySslCtx_;
-    std::unique_ptr<WindowsProxyAuthContext> windowsProxyAuth_;
+    std::unique_ptr<PlatformProxyAuthContext> platformProxyAuth_;
 
     bool isHttps_{false};
     UrlParts urlParts_;
