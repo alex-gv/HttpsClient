@@ -106,6 +106,7 @@ target_link_libraries(https_client
         Boost::beast
         OpenSSL::SSL
         OpenSSL::Crypto
+        $<$<PLATFORM_ID:Windows>:Secur32>
         $<$<PLATFORM_ID:Darwin>:${COREFOUNDATION_LIBRARY}>
         $<$<PLATFORM_ID:Darwin>:${SECURITY_LIBRARY}>
 )

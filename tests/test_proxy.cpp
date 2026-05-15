@@ -158,3 +158,12 @@ TEST(ProxyTest, ProxyConfigIsEnabled) {
     ProxyConfig fullProxy("host", "port", "user", "pass");
     EXPECT_TRUE(fullProxy.isEnabled());
 }
+
+TEST(ProxyTest, ProxyConfigSupportsNtlmAuthentication) {
+    ProxyConfig proxy("host", "port", "DOMAIN\\user", "pass", false, ProxyAuthType::NTLM);
+
+    EXPECT_TRUE(proxy.isEnabled());
+    EXPECT_EQ(proxy.authType, ProxyAuthType::NTLM);
+    EXPECT_EQ(proxy.username, "DOMAIN\\user");
+    EXPECT_EQ(proxy.password, "pass");
+}
