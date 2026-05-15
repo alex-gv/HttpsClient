@@ -147,7 +147,7 @@ std::string buildQueryString(const std::unordered_map<std::string, std::string>&
 }
 }  // namespace
 
-struct HttpSession::NtlmProxyAuthContext {
+struct HttpSession::WindowsProxyAuthContext {
 #ifdef _WIN32
     CredHandle credentials{};
     CtxtHandle context{};
@@ -159,7 +159,7 @@ struct HttpSession::NtlmProxyAuthContext {
     std::string password;
     SEC_WINNT_AUTH_IDENTITY_A identity{};
 
-    ~NtlmProxyAuthContext() {
+    ~WindowsProxyAuthContext() {
         if (hasContext) {
             DeleteSecurityContext(&context);
         }
@@ -168,7 +168,7 @@ struct HttpSession::NtlmProxyAuthContext {
         }
     }
 
-    void acquire(const std::string& rawUsername, const std::string& rawPassword) {
+    void acquire(const std::string& packageName, const std::string& rawUsername, const std::string& rawPassword) {
         void* authData = nullptr;
 
         if (!rawUsername.empty()) {
@@ -177,7 +177,7 @@ struct HttpSession::NtlmProxyAuthContext {
             if (slash != std::string::npos) {
                 domain = rawUsername.substr(0, slash);
                 username = rawUsername.substr(slash + 1);
-            } else if (at != std::string::npos) {
+            } else if (packageName != "Kerberos" && at != std::string::npos) {
                 username = rawUsername.substr(0, at);
                 domain = rawUsername.substr(at + 1);
             } else {
@@ -195,18 +195,18 @@ struct HttpSession::NtlmProxyAuthContext {
             authData = &identity;
         }
 
-        auto status = AcquireCredentialsHandleA(nullptr, const_cast<SEC_CHAR*>("NTLM"), SECPKG_CRED_OUTBOUND, nullptr,
-                                                authData, nullptr, nullptr, &credentials, &expiry);
+        auto status = AcquireCredentialsHandleA(nullptr, const_cast<SEC_CHAR*>(packageName.c_str()), SECPKG_CRED_OUTBOUND,
+                                                nullptr, authData, nullptr, nullptr, &credentials, &expiry);
         if (status != SEC_E_OK) {
-            throw std::runtime_error("AcquireCredentialsHandle(NTLM) failed: 0x" + statusToHex(status));
+            throw std::runtime_error("AcquireCredentialsHandle(" + packageName + ") failed: 0x" + statusToHex(status));
         }
 
         hasCredentials = true;
     }
 
-    std::string createToken(const std::string& proxyHost, const std::string& challenge) {
+    std::string createToken(const std::string& packageName, const std::string& proxyHost, const std::string& challenge) {
         if (!hasCredentials) {
-            throw std::runtime_error("NTLM credentials were not acquired");
+            throw std::runtime_error(packageName + " credentials were not acquired");
         }
 
         SecBuffer outBuffer{};
@@ -237,7 +237,7 @@ struct HttpSession::NtlmProxyAuthContext {
                                                  SECURITY_NATIVE_DREP, inDescPtr, 0, &context, &outDesc, &attrs, &expiry);
 
         if (status != SEC_E_OK && status != SEC_I_CONTINUE_NEEDED) {
-            throw std::runtime_error("InitializeSecurityContext(NTLM) failed: 0x" + statusToHex(status));
+            throw std::runtime_error("InitializeSecurityContext(" + packageName + ") failed: 0x" + statusToHex(status));
         }
 
         hasContext = true;
@@ -258,12 +258,12 @@ private:
         return stream.str();
     }
 #else
-    void acquire(const std::string&, const std::string&) {
-        throw std::runtime_error("NTLM proxy authentication is only supported on Windows");
+    void acquire(const std::string&, const std::string&, const std::string&) {
+        throw std::runtime_error("Windows proxy authentication is only supported on Windows");
     }
 
-    std::string createToken(const std::string&, const std::string&) {
-        throw std::runtime_error("NTLM proxy authentication is only supported on Windows");
+    std::string createToken(const std::string&, const std::string&, const std::string&) {
+        throw std::runtime_error("Windows proxy authentication is only supported on Windows");
     }
 #endif
 };
@@ -548,14 +548,13 @@ void HttpSession::sendProxyConnectRequest() {
 
     proxyConnectRequest_.set(http::field::host, target);
     proxyConnectRequest_.set(http::field::user_agent, config_.userAgent);
-    proxyConnectRequest_.set(http::field::proxy_connection,
-                             config_.proxy.authType == ProxyAuthType::NTLM ? "keep-alive" : "close");
+    proxyConnectRequest_.set(http::field::proxy_connection, isProxyWindowsAuth() ? "keep-alive" : "close");
 
-    if (config_.proxy.authType == ProxyAuthType::NTLM) {
+    if (isProxyWindowsAuth()) {
         try {
-            std::string authHeader = buildProxyNtlmAuthorizationHeader();
+            std::string authHeader = buildProxyWindowsAuthHeader();
             proxyConnectRequest_.set(http::field::proxy_authorization, authHeader);
-            logger_.debug("NTLM Proxy-Authorization header added");
+            logger_.debug("Windows Proxy-Authorization header added");
         } catch (const std::exception& e) {
             finishWithError(e.what());
             return;
@@ -607,14 +606,15 @@ void HttpSession::onProxyConnectRead(beast::error_code ec, std::size_t /*bytesRe
     auto status = proxyConnectResponse_.result_int();
     logger_.info("Proxy CONNECT response status: " + std::to_string(status));
 
-    if (status == 407 && config_.proxy.authType == ProxyAuthType::NTLM && proxyNtlmAuthStep_ == 1) {
-        proxyNtlmChallenge_ = extractProxyNtlmChallenge();
-        if (proxyNtlmChallenge_.empty()) {
-            finishWithError("Proxy requested NTLM authentication but did not send an NTLM challenge");
+    if (status == 407 && isProxyWindowsAuth() && proxyAuthStep_ > 0 && proxyAuthStep_ < 3) {
+        const std::string scheme = config_.proxy.authType == ProxyAuthType::Kerberos ? "Negotiate" : "NTLM";
+        proxyAuthChallenge_ = extractProxyAuthChallenge(scheme);
+        if (proxyAuthChallenge_.empty()) {
+            finishWithError("Proxy requested Windows authentication but did not send a challenge token");
             return;
         }
 
-        logger_.debug("Proxy NTLM challenge received, sending authentication response");
+        logger_.debug("Proxy authentication challenge received, sending authentication response");
         proxyConnectResponse_ = {};
         sendProxyConnectRequest();
         return;
@@ -660,38 +660,46 @@ std::string HttpSession::buildProxyAuthorizationHeader(const std::string& userna
     return "Basic " + base64Encode(credentials);
 }
 
-std::string HttpSession::buildProxyNtlmAuthorizationHeader() {
-    if (!ntlmProxyAuth_) {
-        ntlmProxyAuth_ = std::make_unique<NtlmProxyAuthContext>();
-        ntlmProxyAuth_->acquire(config_.proxy.username, config_.proxy.password);
+bool HttpSession::isProxyWindowsAuth() const {
+    return config_.proxy.authType == ProxyAuthType::NTLM || config_.proxy.authType == ProxyAuthType::Kerberos;
+}
+
+std::string HttpSession::buildProxyWindowsAuthHeader() {
+    const bool useKerberos = config_.proxy.authType == ProxyAuthType::Kerberos;
+    const std::string packageName = useKerberos ? "Kerberos" : "NTLM";
+    const std::string headerScheme = useKerberos ? "Negotiate" : "NTLM";
+
+    if (!windowsProxyAuth_) {
+        windowsProxyAuth_ = std::make_unique<WindowsProxyAuthContext>();
+        windowsProxyAuth_->acquire(packageName, config_.proxy.username, config_.proxy.password);
     }
 
     std::string challenge;
-    if (proxyNtlmAuthStep_ == 1) {
-        challenge = base64Decode(proxyNtlmChallenge_);
+    if (proxyAuthStep_ > 0 && !proxyAuthChallenge_.empty()) {
+        challenge = base64Decode(proxyAuthChallenge_);
     }
 
-    auto token = ntlmProxyAuth_->createToken(config_.proxy.host, challenge);
+    auto token = windowsProxyAuth_->createToken(packageName, config_.proxy.host, challenge);
     if (token.empty()) {
-        throw std::runtime_error("NTLM proxy authentication produced an empty token");
+        throw std::runtime_error(packageName + " proxy authentication produced an empty token");
     }
 
-    ++proxyNtlmAuthStep_;
-    return "NTLM " + base64Encode(token);
+    ++proxyAuthStep_;
+    return headerScheme + " " + base64Encode(token);
 }
 
-std::string HttpSession::extractProxyNtlmChallenge() const {
+std::string HttpSession::extractProxyAuthChallenge(const std::string& scheme) const {
     for (const auto& field : proxyConnectResponse_) {
         if (field.name() != http::field::proxy_authenticate) {
             continue;
         }
 
         std::string value = trim(std::string(field.value()));
-        if (!startsWithNoCase(value, "NTLM")) {
+        if (!startsWithNoCase(value, scheme)) {
             continue;
         }
 
-        value = trim(value.substr(4));
+        value = trim(value.substr(scheme.size()));
         if (!value.empty()) {
             return value;
         }

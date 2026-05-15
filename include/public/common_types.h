@@ -51,7 +51,7 @@ struct HTTPS_CLIENT_API Response {
 
 enum class HTTPS_CLIENT_API Method { GET, POST, PUT, DELETE_, PATCH, HEAD, OPTIONS };
 
-enum class HTTPS_CLIENT_API ProxyAuthType { Basic, NTLM };
+enum class HTTPS_CLIENT_API ProxyAuthType { Basic, NTLM, Kerberos };
 
 struct HTTPS_CLIENT_API RequestConfig {
     std::string url;
